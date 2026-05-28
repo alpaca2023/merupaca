@@ -1,0 +1,66 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* iOS / Apple HIG 風のシステムフォントで統一 */
+:root {
+  --tint: #0a84ff;
+  --sales: #ff9f0a;
+  --success: #34c759;
+  --danger: #ff3b30;
+  --bg: #f2f2f7;
+  --card: #ffffff;
+  --text: #000000;
+  --text-secondary: #8e8e93;
+  --border: #e5e5ea;
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
+  box-sizing: border-box;
+}
+
+html,
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Hiragino Sans", "Yu Gothic", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  letter-spacing: -0.01em;
+}
+
+button {
+  font-family: inherit;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: inherit;
+  transition: transform 0.12s ease, opacity 0.12s ease;
+}
+button:active {
+  transform: scale(0.97);
+  opacity: 0.88;
+}
+
+input:focus,
+textarea:focus {
+  outline: none;
+}
+
+::-webkit-scrollbar {
+  display: none;
+}
+
+@keyframes toastIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 10px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+.toast-in {
+  animation: toastIn 0.3s ease;
+}
