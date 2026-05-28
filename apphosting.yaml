@@ -1,0 +1,14 @@
+# Firebase App Hosting 設定（merupaca バックエンド）
+# https://firebase.google.com/docs/app-hosting/configure
+
+# 実行構成：ベータ規模のため最小インスタンス 0（コールドスタート許容）
+runConfig:
+  minInstances: 0
+
+# 環境変数：
+#   - secret: 名前で Secret Manager 上の値を参照（値はリポジトリに残さない）
+#   - availability: 省略時は RUNTIME のみ。API Route で使うキーは RUNTIME で十分。
+#   Step 2 以降で Firebase / Stripe シークレットを追加する。
+env:
+  - variable: ANTHROPIC_API_KEY
+    secret: ANTHROPIC_API_KEY
