@@ -55,12 +55,21 @@ function SettingsInner() {
     <main className="min-h-screen bg-[--bg]">
       {/* ナビバー */}
       <div className="sticky top-0 z-10 bg-[--bg]/85 backdrop-blur border-b border-black/[.08]">
-        <div className="max-w-[640px] mx-auto px-2 h-12 flex items-center">
-          <button onClick={back} className="flex items-center gap-1 px-2" aria-label="戻る">
+        <div className="max-w-[640px] mx-auto px-2 h-12 relative flex items-center">
+          <button
+            onClick={back}
+            type="button"
+            className="relative z-10 flex items-center gap-1 px-2 py-2"
+            aria-label="戻る"
+          >
             <ChevronLeft size={24} color={TINT} strokeWidth={2.4} />
             <span className="text-[--tint] text-[17px]">戻る</span>
           </button>
-          <div className="flex-1 text-center font-bold text-base -ml-12">設定</div>
+          {/* タイトルはクリックを透過させる（pointer-events-none）。
+              絶対配置で「戻る」ボタンの上に被っても click を奪わない */}
+          <div className="absolute inset-0 flex items-center justify-center font-bold text-base pointer-events-none">
+            設定
+          </div>
         </div>
       </div>
 
