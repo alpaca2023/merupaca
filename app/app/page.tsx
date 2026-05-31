@@ -25,7 +25,7 @@ import {
   AlertCircle,
   Loader2,
 } from "lucide-react";
-import { loadProfile } from "@/lib/profile-store";
+import { getOrMigrateProfile } from "@/lib/profile-migrate";
 import { UserProfile, MAX_BODY_LENGTH, GenerateResponse } from "@/lib/types";
 import { detectSales } from "@/lib/sales-detect";
 import { useRequireAuth } from "@/lib/use-require-auth";
@@ -38,7 +38,7 @@ type Variant = "casual" | "polished";
 export default function AppPage() {
   const router = useRouter();
   // Auth gate：未ログインなら /app/login へ自動遷移
-  const { ready: authReady } = useRequireAuth();
+  const { ready: authReady, user } = useRequireAuth();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [ready, setReady] = useState(false);
   const [stage, setStage] = useState<Stage>("input");
@@ -52,18 +52,30 @@ export default function AppPage() {
   const [copied, setCopied] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
-  // 認証通過後：プロフィール未完了ならオンボーディングへ
-  // （プロフィールは PR-B で Firestore に移行予定。現在は localStorage）
+  // 認証通過後：Firestore からプロフィール取得（旧 localStorage からは自動マイグレート）
   useEffect(() => {
-    if (!authReady) return;
-    const p = loadProfile();
-    if (!p) {
-      router.replace("/app/onboarding");
-      return;
-    }
-    setProfile(p);
-    setReady(true);
-  }, [authReady, router]);
+    if (!authReady || !user) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const p = await getOrMigrateProfile(user.uid);
+        if (cancelled) return;
+        if (!p) {
+          router.replace("/app/onboarding");
+          return;
+        }
+        setProfile(p);
+        setReady(true);
+      } catch (e) {
+        if (cancelled) return;
+        const msg = e instanceof Error ? e.message : String(e);
+        setError(`プロフィールの読み込みに失敗しました。再読み込みしてください。(${msg})`);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [authReady, user, router]);
 
   const fire = (msg: string) => {
     setToast(msg);

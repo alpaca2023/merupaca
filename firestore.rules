@@ -1,0 +1,29 @@
+rules_version = '2';
+
+// メルパカ Firestore セキュリティルール
+//
+// 設計方針:
+//   - users/{uid} ドキュメントは本人のみ R/W
+//   - サブコレクション（usage, styleSamples）は後続 PR で追加する
+//   - それ以外のパスは明示的に拒否（ホワイトリスト方式）
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===== users/{uid} =====
+    // 文体プロフィール本体。本人のみ読み書き可。
+    match /users/{userId} {
+      allow read, write: if request.auth != null
+                         && request.auth.uid == userId;
+
+      // PR-C で追加予定: users/{uid}/usage/{YYYY-MM-DD-JST}
+      // Step 5 で追加予定: users/{uid}/styleSamples/{autoId}
+      // → 該当 PR で本ファイルに rule を追記する
+    }
+
+    // ===== それ以外は全拒否（明示） =====
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

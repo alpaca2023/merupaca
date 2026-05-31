@@ -11,8 +11,10 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Sparkles } from "lucide-react";
 import { UserProfile, Tone, SalesStrength, DEFAULT_PROFILE } from "@/lib/types";
-import { loadProfile, saveProfile } from "@/lib/profile-store";
+import { saveProfile } from "@/lib/profile-store";
+import { getOrMigrateProfile } from "@/lib/profile-migrate";
 import { useRequireAuth } from "@/lib/use-require-auth";
+import { Loader2 } from "lucide-react";
 
 type QuestionId = "tone" | "aisatsu" | "exclaim" | "sales";
 
@@ -70,19 +72,32 @@ type ChatMessage = { from: "bot" | "me"; text: string };
 export default function OnboardingPage() {
   const router = useRouter();
   // Auth gate：未ログインなら /app/login へ
-  const { ready: authReady } = useRequireAuth();
+  const { ready: authReady, user } = useRequireAuth();
   const [step, setStep] = useState(0);
   const [history, setHistory] = useState<ChatMessage[]>([{ from: "bot", text: QUESTIONS[0].bot }]);
   const [draft, setDraft] = useState<UserProfile>(() => ({ ...DEFAULT_PROFILE }));
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  // 認証通過後：既にオンボーディング完了済みなら /app へ
+  // 認証通過後：既にオンボーディング完了済み（Firestore or legacy localStorage）なら /app へ
   useEffect(() => {
-    if (!authReady) return;
-    const existing = loadProfile();
-    if (existing) {
-      router.replace("/app");
-    }
-  }, [authReady, router]);
+    if (!authReady || !user) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const existing = await getOrMigrateProfile(user.uid);
+        if (cancelled) return;
+        if (existing) {
+          router.replace("/app");
+        }
+      } catch {
+        // 読み込み失敗時はオンボーディングを表示（致命的ではない）
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [authReady, user, router]);
 
   const currentQuestion = useMemo(() => (step < QUESTIONS.length ? QUESTIONS[step] : null), [step]);
 
@@ -110,15 +125,23 @@ export default function OnboardingPage() {
     setStep(step + 1);
   };
 
-  const finish = () => {
-    // M-5 対策：未設定キーは DEFAULT_PROFILE から確実に埋まる
-    const profileToSave: UserProfile = {
-      ...DEFAULT_PROFILE,
-      ...draft,
-      createdAt: new Date().toISOString(),
-    };
-    saveProfile(profileToSave);
-    router.push("/app/settings?firstrun=1");
+  const finish = async () => {
+    if (!user || saving) return;
+    setError(null);
+    setSaving(true);
+    try {
+      // M-5 対策：未設定キーは DEFAULT_PROFILE から確実に埋まる
+      // createdAt は saveProfile 側で serverTimestamp() が自動で入る
+      const profileToSave: UserProfile = {
+        ...DEFAULT_PROFILE,
+        ...draft,
+      };
+      await saveProfile(user.uid, profileToSave);
+      router.push("/app/settings?firstrun=1");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      setSaving(false);
+    }
   };
 
   return (
@@ -162,13 +185,30 @@ export default function OnboardingPage() {
               </button>
             ))
           ) : (
-            <button
-              onClick={finish}
-              className="w-full flex items-center justify-center gap-2 py-4 rounded-2xl bg-[--tint] text-white font-bold text-base"
-            >
-              <Sparkles size={17} strokeWidth={2.4} color="#fff" />
-              メルパカを始める
-            </button>
+            <>
+              <button
+                onClick={finish}
+                disabled={saving}
+                className="w-full flex items-center justify-center gap-2 py-4 rounded-2xl bg-[--tint] text-white font-bold text-base disabled:opacity-50"
+              >
+                {saving ? (
+                  <>
+                    <Loader2 size={17} className="animate-spin" />
+                    保存中…
+                  </>
+                ) : (
+                  <>
+                    <Sparkles size={17} strokeWidth={2.4} color="#fff" />
+                    メルパカを始める
+                  </>
+                )}
+              </button>
+              {error && (
+                <div className="px-3 py-2 rounded-xl bg-[--danger]/10 text-[--danger] text-xs leading-relaxed">
+                  保存に失敗しました: {error}
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>
