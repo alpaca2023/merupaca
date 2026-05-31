@@ -28,6 +28,7 @@ import {
 import { loadProfile } from "@/lib/profile-store";
 import { UserProfile, MAX_BODY_LENGTH, GenerateResponse } from "@/lib/types";
 import { detectSales } from "@/lib/sales-detect";
+import { useRequireAuth } from "@/lib/use-require-auth";
 
 const TINT = "#0a84ff";
 
@@ -36,6 +37,8 @@ type Variant = "casual" | "polished";
 
 export default function AppPage() {
   const router = useRouter();
+  // Auth gate：未ログインなら /app/login へ自動遷移
+  const { ready: authReady } = useRequireAuth();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [ready, setReady] = useState(false);
   const [stage, setStage] = useState<Stage>("input");
@@ -49,8 +52,10 @@ export default function AppPage() {
   const [copied, setCopied] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
-  // 初回ロード：プロフィール未完了ならオンボーディングへ
+  // 認証通過後：プロフィール未完了ならオンボーディングへ
+  // （プロフィールは PR-B で Firestore に移行予定。現在は localStorage）
   useEffect(() => {
+    if (!authReady) return;
     const p = loadProfile();
     if (!p) {
       router.replace("/app/onboarding");
@@ -58,7 +63,7 @@ export default function AppPage() {
     }
     setProfile(p);
     setReady(true);
-  }, [router]);
+  }, [authReady, router]);
 
   const fire = (msg: string) => {
     setToast(msg);

@@ -13,9 +13,11 @@
 
 import { useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, LogOut } from "lucide-react";
 import { loadProfile, saveProfile, clearProfile } from "@/lib/profile-store";
 import { UserProfile, DEFAULT_PROFILE } from "@/lib/types";
+import { useRequireAuth } from "@/lib/use-require-auth";
+import { useAuth } from "@/lib/auth-context";
 
 const TINT = "#0a84ff";
 
@@ -24,18 +26,22 @@ function SettingsInner() {
   const searchParams = useSearchParams();
   const isFirstRun = searchParams.get("firstrun") === "1";
 
+  // Auth gate
+  const { ready: authReady, user } = useRequireAuth();
+  const { signOutUser } = useAuth();
   const [profile, setProfile] = useState<UserProfile | null>(null);
 
   useEffect(() => {
+    if (!authReady) return;
     const p = loadProfile();
     if (!p) {
       router.replace("/app/onboarding");
       return;
     }
     setProfile(p);
-  }, [router]);
+  }, [authReady, router]);
 
-  if (!profile) return null;
+  if (!authReady || !profile) return null;
 
   const update = <K extends keyof UserProfile>(key: K, value: UserProfile[K]) => {
     const next = { ...profile, [key]: value };
@@ -49,6 +55,12 @@ function SettingsInner() {
     if (!window.confirm("初期設定をやり直しますか？保存された設定は削除されます。")) return;
     clearProfile();
     router.push("/app/onboarding");
+  };
+
+  const handleSignOut = async () => {
+    if (!window.confirm("ログアウトしますか？")) return;
+    await signOutUser();
+    router.replace("/app/login");
   };
 
   return (
@@ -152,6 +164,22 @@ function SettingsInner() {
         <p className="text-xs text-[--text-secondary] mx-2 mt-2 leading-relaxed">
           ※ ONにすると、コピーした返信文を最大20件まで保存し、次回以降の生成のお手本として使います。受信メール本文は保存されません。
         </p>
+
+        {/* アカウント */}
+        <SectionLabel>アカウント</SectionLabel>
+        <Card>
+          <div className="px-4 py-3 border-b border-[--border]">
+            <div className="text-[11px] text-[--text-secondary] font-semibold mb-1">ログイン中</div>
+            <div className="text-[14px] text-black break-all">{user?.email ?? user?.uid}</div>
+          </div>
+          <button
+            onClick={handleSignOut}
+            className="w-full flex items-center gap-2 px-4 py-3 text-left text-[14.5px] text-black font-semibold"
+          >
+            <LogOut size={16} strokeWidth={2.4} color="#8e8e93" />
+            ログアウトする
+          </button>
+        </Card>
 
         {/* リセット */}
         <SectionLabel>初期化</SectionLabel>
