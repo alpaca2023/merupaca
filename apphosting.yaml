@@ -7,8 +7,58 @@ runConfig:
 
 # 環境変数：
 #   - secret: 名前で Secret Manager 上の値を参照（値はリポジトリに残さない）
-#   - availability: 省略時は RUNTIME のみ。API Route で使うキーは RUNTIME で十分。
-#   Step 2 以降で Firebase / Stripe シークレットを追加する。
+#   - value: 平文で記述（NEXT_PUBLIC_* など公開前提のもの）
+#   - availability: BUILD はビルド時に Next.js が inline する。
+#                   RUNTIME は API Route / Server Component で実行時に読む。
+#
+# 設計判断（レビューチャット M-AppHosting-1）：
+#   NEXT_PUBLIC_FIREBASE_* は Firebase 設計上ブラウザに公開される値のため
+#   Cloud Secret Manager に入れず apphosting.yaml に value: で直書きする。
+#   セキュリティは Firebase Auth + Firestore Rules で担保する。
 env:
+  # ===== サーバー側のみ（Cloud Secret Manager） =====
   - variable: ANTHROPIC_API_KEY
     secret: ANTHROPIC_API_KEY
+
+  - variable: FIREBASE_ADMIN_CLIENT_EMAIL
+    secret: FIREBASE_ADMIN_CLIENT_EMAIL
+
+  - variable: FIREBASE_ADMIN_PRIVATE_KEY
+    secret: FIREBASE_ADMIN_PRIVATE_KEY
+
+  # ===== クライアント側（公開前提・ビルド時 inline） =====
+  - variable: NEXT_PUBLIC_FIREBASE_API_KEY
+    value: "AIzaSyDQIjsUjcOk_TFKGC3J0rUq1nYThsnqWL0"
+    availability:
+      - BUILD
+      - RUNTIME
+
+  - variable: NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
+    value: "merupaca.firebaseapp.com"
+    availability:
+      - BUILD
+      - RUNTIME
+
+  - variable: NEXT_PUBLIC_FIREBASE_PROJECT_ID
+    value: "merupaca"
+    availability:
+      - BUILD
+      - RUNTIME
+
+  - variable: NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
+    value: "merupaca.firebasestorage.app"
+    availability:
+      - BUILD
+      - RUNTIME
+
+  - variable: NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID
+    value: "910398811956"
+    availability:
+      - BUILD
+      - RUNTIME
+
+  - variable: NEXT_PUBLIC_FIREBASE_APP_ID
+    value: "1:910398811956:web:d128523161c46bf64eff61"
+    availability:
+      - BUILD
+      - RUNTIME

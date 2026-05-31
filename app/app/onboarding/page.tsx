@@ -12,6 +12,7 @@ import { useRouter } from "next/navigation";
 import { Sparkles } from "lucide-react";
 import { UserProfile, Tone, SalesStrength, DEFAULT_PROFILE } from "@/lib/types";
 import { loadProfile, saveProfile } from "@/lib/profile-store";
+import { useRequireAuth } from "@/lib/use-require-auth";
 
 type QuestionId = "tone" | "aisatsu" | "exclaim" | "sales";
 
@@ -68,17 +69,20 @@ type ChatMessage = { from: "bot" | "me"; text: string };
 
 export default function OnboardingPage() {
   const router = useRouter();
+  // Auth gate：未ログインなら /app/login へ
+  const { ready: authReady } = useRequireAuth();
   const [step, setStep] = useState(0);
   const [history, setHistory] = useState<ChatMessage[]>([{ from: "bot", text: QUESTIONS[0].bot }]);
   const [draft, setDraft] = useState<UserProfile>(() => ({ ...DEFAULT_PROFILE }));
 
-  // 既にオンボーディング完了済みなら /app へ
+  // 認証通過後：既にオンボーディング完了済みなら /app へ
   useEffect(() => {
+    if (!authReady) return;
     const existing = loadProfile();
     if (existing) {
       router.replace("/app");
     }
-  }, [router]);
+  }, [authReady, router]);
 
   const currentQuestion = useMemo(() => (step < QUESTIONS.length ? QUESTIONS[step] : null), [step]);
 
