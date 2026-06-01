@@ -39,6 +39,7 @@ import { auth, googleProvider } from "./firebase";
  * signInWithEmailLink に渡す（Firebase 推奨パターン）。
  */
 const EMAIL_FOR_SIGNIN_KEY = "merupaca:emailForSignIn";
+const AUTH_INIT_TIMEOUT_MS = 8000;
 
 interface AuthContextValue {
   user: User | null;
@@ -66,11 +67,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (u) => {
-      setUser(u);
+    let settled = false;
+    const timeout = window.setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      console.warn("[auth] Firebase Auth initialization timed out");
+      setUser(null);
       setLoading(false);
-    });
-    return () => unsubscribe();
+    }, AUTH_INIT_TIMEOUT_MS);
+
+    const unsubscribe = onAuthStateChanged(
+      auth,
+      (u) => {
+        settled = true;
+        window.clearTimeout(timeout);
+        setUser(u);
+        setLoading(false);
+      },
+      (error) => {
+        settled = true;
+        window.clearTimeout(timeout);
+        console.error("[auth] Firebase Auth initialization failed:", error);
+        setUser(null);
+        setLoading(false);
+      },
+    );
+
+    return () => {
+      window.clearTimeout(timeout);
+      unsubscribe();
+    };
   }, []);
 
   const signInGoogle = useCallback(async () => {
