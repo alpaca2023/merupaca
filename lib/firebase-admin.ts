@@ -15,8 +15,9 @@ const projectId =
   process.env.FIREBASE_ADMIN_PROJECT_ID || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
 const clientEmail = process.env.FIREBASE_ADMIN_CLIENT_EMAIL;
 const privateKey = process.env.FIREBASE_ADMIN_PRIVATE_KEY?.replace(/\\n/g, "\n");
+const isAppHosting = process.env.FIREBASE_APP_HOSTING === "1";
 
-const hasServiceAccount = Boolean(projectId && clientEmail && privateKey);
+const hasServiceAccount = !isAppHosting && Boolean(projectId && clientEmail && privateKey);
 
 const adminApp = getApps().length
   ? getApps()[0]
@@ -28,7 +29,7 @@ const adminApp = getApps().length
           privateKey,
         }),
       })
-    : initializeApp();
+    : initializeApp(projectId ? { projectId } : undefined);
 
 export const adminAuth = getAuth(adminApp);
 export const adminDb = getFirestore(adminApp);
