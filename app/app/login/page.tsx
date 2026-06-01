@@ -63,14 +63,6 @@ export default function LoginPage() {
     }
   };
 
-  if (loading) {
-    return (
-      <main className="min-h-screen flex items-center justify-center text-[--text-secondary]">
-        <Loader2 className="animate-spin" size={20} />
-      </main>
-    );
-  }
-
   return (
     <main className="min-h-screen bg-[--bg]">
       <div className="max-w-[420px] mx-auto px-5 pt-12 pb-20">

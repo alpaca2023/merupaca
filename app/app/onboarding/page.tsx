@@ -7,13 +7,14 @@
  * M-5 対応：salesStrength は明示的にデフォルト値を持つ
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Sparkles } from "lucide-react";
 import { UserProfile, Tone, SalesStrength, DEFAULT_PROFILE } from "@/lib/types";
 import { saveProfile } from "@/lib/profile-store";
 import { getOrMigrateProfile } from "@/lib/profile-migrate";
 import { useRequireAuth } from "@/lib/use-require-auth";
+import { AuthWaitFallback } from "@/lib/auth-wait-fallback";
 import { Loader2 } from "lucide-react";
 
 type QuestionId = "tone" | "aisatsu" | "exclaim" | "sales";
@@ -99,7 +100,11 @@ export default function OnboardingPage() {
     };
   }, [authReady, user, router]);
 
-  const currentQuestion = useMemo(() => (step < QUESTIONS.length ? QUESTIONS[step] : null), [step]);
+  const currentQuestion = step < QUESTIONS.length ? QUESTIONS[step] : null;
+
+  if (!authReady || !user) {
+    return <AuthWaitFallback message="初期設定を準備しています" />;
+  }
 
   const pick = (opt: Option) => {
     if (!currentQuestion) return;

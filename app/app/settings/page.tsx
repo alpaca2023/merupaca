@@ -20,6 +20,7 @@ import { UserProfile, DEFAULT_PROFILE } from "@/lib/types";
 import { useRequireAuth } from "@/lib/use-require-auth";
 import { useAuth } from "@/lib/auth-context";
 import { useDebouncedValue } from "@/lib/use-debounce";
+import { AuthWaitFallback } from "@/lib/auth-wait-fallback";
 
 const TINT = "#0a84ff";
 const SAVE_DEBOUNCE_MS = 800;
@@ -111,7 +112,9 @@ function SettingsInner() {
     };
   }, []); // 空配列：アンマウント時のみ実行
 
-  if (!authReady || !profile) return null;
+  if (!authReady || !profile) {
+    return <AuthWaitFallback message="設定を読み込んでいます" />;
+  }
 
   const update = <K extends keyof UserProfile>(key: K, value: UserProfile[K]) => {
     setProfile((prev) => (prev ? { ...prev, [key]: value } : prev));

@@ -82,6 +82,12 @@ function CallbackInner() {
             <p className="text-sm text-[--text-secondary]">
               {stage === "verifying" ? "ログインリンクを確認中…" : "ログイン処理中…"}
             </p>
+            <a
+              href="/app/login"
+              className="mt-5 inline-flex items-center justify-center w-full rounded-xl bg-[--tint] px-4 py-3 text-sm font-bold text-white"
+            >
+              ログイン画面へ
+            </a>
           </>
         ) : stage === "done" ? (
           <>

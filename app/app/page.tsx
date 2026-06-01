@@ -29,6 +29,7 @@ import { getOrMigrateProfile } from "@/lib/profile-migrate";
 import { UserProfile, MAX_BODY_LENGTH, GenerateResponse } from "@/lib/types";
 import { detectSales } from "@/lib/sales-detect";
 import { useRequireAuth } from "@/lib/use-require-auth";
+import { AuthWaitFallback } from "@/lib/auth-wait-fallback";
 
 const TINT = "#0a84ff";
 
@@ -148,11 +149,7 @@ export default function AppPage() {
   };
 
   if (!ready || !profile) {
-    return (
-      <main className="min-h-screen flex items-center justify-center text-[--text-secondary]">
-        <Loader2 className="animate-spin" size={20} />
-      </main>
-    );
+    return <AuthWaitFallback message="アプリを準備しています" />;
   }
 
   const sales = stage === "input" ? detectSales(body, profile.salesStrength) : { isSales: false, hits: [], reason: "" };
