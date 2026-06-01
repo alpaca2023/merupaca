@@ -27,15 +27,25 @@ function getAdminApp(): App {
   const isAppHosting = process.env.FIREBASE_APP_HOSTING === "1";
   const hasServiceAccount = !isAppHosting && Boolean(projectId && clientEmail && privateKey);
 
-  adminApp = hasServiceAccount
-    ? initializeApp({
+  if (hasServiceAccount) {
+    try {
+      adminApp = initializeApp({
         credential: cert({
           projectId,
           clientEmail,
           privateKey,
         }),
-      })
-    : initializeApp(projectId ? { projectId } : undefined);
+      });
+      return adminApp;
+    } catch (err) {
+      console.warn(
+        "[firebase-admin] Service account credential failed; falling back to application default credentials.",
+        err instanceof Error ? err.message : String(err),
+      );
+    }
+  }
+
+  adminApp = initializeApp(projectId ? { projectId } : undefined);
   return adminApp;
 }
 
