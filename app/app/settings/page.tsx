@@ -11,15 +11,18 @@
  * H-1 対応：このフォームの全項目はユーザーが自由に入力する。固定値は持たない。
  */
 
-import { useEffect, useState, Suspense } from "react";
+import { useEffect, useRef, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronLeft, LogOut } from "lucide-react";
-import { loadProfile, saveProfile, clearProfile } from "@/lib/profile-store";
+import { saveProfile, clearProfile } from "@/lib/profile-store";
+import { getOrMigrateProfile } from "@/lib/profile-migrate";
 import { UserProfile, DEFAULT_PROFILE } from "@/lib/types";
 import { useRequireAuth } from "@/lib/use-require-auth";
 import { useAuth } from "@/lib/auth-context";
+import { useDebouncedValue } from "@/lib/use-debounce";
 
 const TINT = "#0a84ff";
+const SAVE_DEBOUNCE_MS = 800;
 
 function SettingsInner() {
   const router = useRouter();
@@ -30,31 +33,115 @@ function SettingsInner() {
   const { ready: authReady, user } = useRequireAuth();
   const { signOutUser } = useAuth();
   const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [flushing, setFlushing] = useState(false);
+  // 初回ロード完了フラグ。これが false の間はデバウンス保存を発火しない
+  const loadedRef = useRef(false);
+
+  // M-1 対策：unmount 時の best-effort flush で参照する最新値を ref で持つ
+  // （useEffect cleanup 内ではクロージャ越しに古い値を参照してしまうため）
+  const profileRef = useRef<UserProfile | null>(null);
+  const userRef = useRef(user);
+  useEffect(() => {
+    profileRef.current = profile;
+  }, [profile]);
+  useEffect(() => {
+    userRef.current = user;
+  }, [user]);
 
   useEffect(() => {
-    if (!authReady) return;
-    const p = loadProfile();
-    if (!p) {
-      router.replace("/app/onboarding");
-      return;
-    }
-    setProfile(p);
-  }, [authReady, router]);
+    if (!authReady || !user) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const p = await getOrMigrateProfile(user.uid);
+        if (cancelled) return;
+        if (!p) {
+          router.replace("/app/onboarding");
+          return;
+        }
+        setProfile(p);
+        loadedRef.current = true;
+      } catch (e) {
+        if (cancelled) return;
+        setSaveError(`プロフィール読み込み失敗: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [authReady, user, router]);
+
+  // デバウンス保存：profile の変更後 800ms 経ったら Firestore に書き込む
+  const debouncedProfile = useDebouncedValue(profile, SAVE_DEBOUNCE_MS);
+  useEffect(() => {
+    if (!loadedRef.current || !user || !debouncedProfile) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        await saveProfile(user.uid, debouncedProfile);
+        if (!cancelled) setSaveError(null);
+      } catch (e) {
+        if (cancelled) return;
+        setSaveError(`保存に失敗しました: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [debouncedProfile, user]);
+
+  // M-1 対策：unmount 時に未保存の変更を best-effort で flush
+  // （タブを閉じる、ブラウザバック等で「戻る」ボタンを経由しないケース対策）
+  // ref で最新値を参照するため deps は空でよい
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    return () => {
+      const latestProfile = profileRef.current;
+      const latestUser = userRef.current;
+      if (loadedRef.current && latestUser && latestProfile) {
+        // No await（unmount 中なので fire-and-forget）
+        saveProfile(latestUser.uid, latestProfile).catch(() => {
+          // unmount 中で UI 更新できないため握りつぶす
+        });
+      }
+    };
+  }, []); // 空配列：アンマウント時のみ実行
 
   if (!authReady || !profile) return null;
 
   const update = <K extends keyof UserProfile>(key: K, value: UserProfile[K]) => {
-    const next = { ...profile, [key]: value };
-    setProfile(next);
-    saveProfile(next);
+    setProfile((prev) => (prev ? { ...prev, [key]: value } : prev));
   };
 
-  const back = () => router.push("/app");
+  // M-1 対策：「戻る」押下時はデバウンスを待たず最新の profile を必ず保存してから遷移
+  // 保存失敗時は遷移せずエラー表示
+  const back = async () => {
+    if (flushing) return;
+    if (user && profile && loadedRef.current) {
+      setFlushing(true);
+      try {
+        await saveProfile(user.uid, profile);
+        setSaveError(null);
+      } catch (e) {
+        setSaveError(`保存に失敗しました: ${e instanceof Error ? e.message : String(e)}`);
+        setFlushing(false);
+        return;
+      }
+      setFlushing(false);
+    }
+    router.push("/app");
+  };
 
-  const handleReset = () => {
+  const handleReset = async () => {
+    if (!user) return;
     if (!window.confirm("初期設定をやり直しますか？保存された設定は削除されます。")) return;
-    clearProfile();
-    router.push("/app/onboarding");
+    try {
+      await clearProfile(user.uid);
+      router.push("/app/onboarding");
+    } catch (e) {
+      setSaveError(`削除に失敗しました: ${e instanceof Error ? e.message : String(e)}`);
+    }
   };
 
   const handleSignOut = async () => {
@@ -71,11 +158,12 @@ function SettingsInner() {
           <button
             onClick={back}
             type="button"
-            className="relative z-10 flex items-center gap-1 px-2 py-2"
+            disabled={flushing}
+            className="relative z-10 flex items-center gap-1 px-2 py-2 disabled:opacity-50"
             aria-label="戻る"
           >
             <ChevronLeft size={24} color={TINT} strokeWidth={2.4} />
-            <span className="text-[--tint] text-[17px]">戻る</span>
+            <span className="text-[--tint] text-[17px]">{flushing ? "保存中…" : "戻る"}</span>
           </button>
           {/* タイトルはクリックを透過させる（pointer-events-none）。
               絶対配置で「戻る」ボタンの上に被っても click を奪わない */}
@@ -89,6 +177,12 @@ function SettingsInner() {
         {isFirstRun && (
           <div className="mb-4 bg-[--tint]/10 text-[--tint] text-sm font-semibold rounded-2xl px-4 py-3 leading-relaxed">
             あと少しだけ。署名情報を入れると、返信案にあなたの会社名・氏名が入ります。
+          </div>
+        )}
+
+        {saveError && (
+          <div className="mb-4 bg-[--danger]/10 text-[--danger] text-xs font-semibold rounded-2xl px-4 py-3 leading-relaxed">
+            {saveError}
           </div>
         )}
 
