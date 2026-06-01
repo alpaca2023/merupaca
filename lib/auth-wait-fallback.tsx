@@ -1,7 +1,5 @@
 "use client";
 
-import { Loader2 } from "lucide-react";
-
 export function AuthWaitFallback({
   message = "ログイン状態を確認しています",
 }: {
@@ -10,7 +8,7 @@ export function AuthWaitFallback({
   return (
     <main className="min-h-screen bg-[--bg] flex items-center justify-center px-5">
       <div className="max-w-[360px] w-full text-center">
-        <Loader2 className="animate-spin mx-auto mb-4 text-[--tint]" size={28} />
+        <div className="text-5xl mb-4">🦙</div>
         <p className="text-sm font-semibold text-black">{message}</p>
         <p className="mt-2 text-xs text-[--text-secondary] leading-relaxed">
           画面が変わらない場合はログイン画面から開き直してください。
