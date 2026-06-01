@@ -7,20 +7,119 @@
  * - サーバー側でのみ ANTHROPIC_API_KEY を使う（クライアントには漏らさない）
  * - 受信メール本文は DB に保存しない（生成処理に使うのみ）
  * - 入力 3,000文字 を超えると 400 を返す（L-3）
+ * - Firebase ID token を検証し、無料プランは JST 1日5通までに制限する（M-1）
  * - JSON パース失敗時は1回リトライ
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { buildSystemPrompt, buildUserMessage } from "@/lib/system-prompt";
-import { GenerateRequest, GenerateResponse, MAX_BODY_LENGTH } from "@/lib/types";
+import { adminAuth, adminDb } from "@/lib/firebase-admin";
+import {
+  DEFAULT_PROFILE,
+  GenerateRequest,
+  GenerateResponse,
+  MAX_BODY_LENGTH,
+  UsageStatus,
+  UserProfile,
+} from "@/lib/types";
+import { FieldValue } from "firebase-admin/firestore";
 
 export const runtime = "nodejs";
 
 const CLAUDE_MODEL = "claude-sonnet-4-5";
 const MAX_TOKENS = 2048;
+const FREE_DAILY_LIMIT = 5;
+const JST_OFFSET_MS = 9 * 60 * 60 * 1000;
+
+class UsageLimitExceededError extends Error {
+  constructor(
+    readonly usage: UsageStatus,
+  ) {
+    super("FREE_DAILY_LIMIT_EXCEEDED");
+  }
+}
+
+function getBearerToken(req: NextRequest): string | null {
+  const header = req.headers.get("authorization");
+  if (!header?.startsWith("Bearer ")) return null;
+  return header.slice("Bearer ".length).trim() || null;
+}
+
+function getJstDateKey(now = new Date()): string {
+  return new Date(now.getTime() + JST_OFFSET_MS).toISOString().slice(0, 10);
+}
+
+function normalizePlan(value: unknown): UserProfile["plan"] {
+  return value === "paid" ? "paid" : "free";
+}
+
+async function loadServerPlan(uid: string): Promise<UserProfile["plan"]> {
+  const snap = await adminDb.doc(`users/${uid}`).get();
+  if (!snap.exists) {
+    throw new Error("プロフィールが未作成です");
+  }
+  return normalizePlan(snap.data()?.plan);
+}
+
+async function reserveUsage(uid: string, plan: UserProfile["plan"]): Promise<UsageStatus> {
+  const date = getJstDateKey();
+  if (plan === "paid") {
+    return { plan, date, used: null, limit: null, remaining: null };
+  }
+
+  const usageRef = adminDb.doc(`users/${uid}/usage/${date}`);
+  return adminDb.runTransaction(async (tx) => {
+    const snap = await tx.get(usageRef);
+    const current = snap.exists && typeof snap.data()?.count === "number" ? snap.data()!.count : 0;
+
+    if (current >= FREE_DAILY_LIMIT) {
+      throw new UsageLimitExceededError({
+        plan,
+        date,
+        used: current,
+        limit: FREE_DAILY_LIMIT,
+        remaining: 0,
+      });
+    }
+
+    const next = current + 1;
+    tx.set(
+      usageRef,
+      {
+        count: next,
+        date,
+        updatedAt: FieldValue.serverTimestamp(),
+        ...(!snap.exists ? { createdAt: FieldValue.serverTimestamp() } : {}),
+      },
+      { merge: true },
+    );
+
+    return {
+      plan,
+      date,
+      used: next,
+      limit: FREE_DAILY_LIMIT,
+      remaining: Math.max(FREE_DAILY_LIMIT - next, 0),
+    };
+  });
+}
 
 export async function POST(req: NextRequest) {
+  // ---- 認証 ----
+  const token = getBearerToken(req);
+  if (!token) {
+    return NextResponse.json({ error: "ログインが必要です" }, { status: 401 });
+  }
+
+  let uid: string;
+  try {
+    const decoded = await adminAuth.verifyIdToken(token);
+    uid = decoded.uid;
+  } catch {
+    return NextResponse.json({ error: "ログイン情報を確認できませんでした" }, { status: 401 });
+  }
+
   // ---- 入力バリデーション ----
   let payload: GenerateRequest;
   try {
@@ -50,9 +149,30 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "ANTHROPIC_API_KEY が設定されていません" }, { status: 500 });
   }
 
+  // ---- 利用制限 ----
+  let usage: UsageStatus;
+  let plan: UserProfile["plan"];
+  try {
+    plan = await loadServerPlan(uid);
+    usage = await reserveUsage(uid, plan);
+  } catch (err) {
+    if (err instanceof UsageLimitExceededError) {
+      return NextResponse.json(
+        {
+          error: "無料プランの本日分（5通）を使い切りました。有料プランでは無制限に利用できます。",
+          usage: err.usage,
+        },
+        { status: 429 },
+      );
+    }
+    const message = err instanceof Error ? err.message : String(err);
+    return NextResponse.json({ error: message }, { status: 403 });
+  }
+
   const client = new Anthropic({ apiKey });
-  const systemPrompt = buildSystemPrompt(payload.profile, payload.styleSamples ?? []);
-  const userMessage = buildUserMessage(payload);
+  const profile: UserProfile = { ...DEFAULT_PROFILE, ...payload.profile, plan };
+  const systemPrompt = buildSystemPrompt(profile, payload.styleSamples ?? []);
+  const userMessage = buildUserMessage({ ...payload, profile });
 
   // ---- Claude 呼び出し + JSONパース（失敗時1回リトライ） ----
   const callClaude = async () => {
@@ -84,11 +204,11 @@ export async function POST(req: NextRequest) {
     let raw: string;
     try {
       raw = await callClaude();
-      return NextResponse.json(parseResponse(raw));
+      return NextResponse.json({ ...parseResponse(raw), usage });
     } catch {
       // JSONパース失敗 → 1回だけリトライ
       raw = await callClaude();
-      return NextResponse.json(parseResponse(raw));
+      return NextResponse.json({ ...parseResponse(raw), usage });
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

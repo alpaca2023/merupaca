@@ -26,6 +26,15 @@ env:
   - variable: FIREBASE_ADMIN_PRIVATE_KEY
     secret: FIREBASE_ADMIN_PRIVATE_KEY
 
+  - variable: STRIPE_SECRET_KEY
+    secret: STRIPE_SECRET_KEY
+
+  - variable: STRIPE_WEBHOOK_SECRET
+    secret: STRIPE_WEBHOOK_SECRET
+
+  - variable: STRIPE_PRICE_ID
+    secret: STRIPE_PRICE_ID
+
   # ===== クライアント側（公開前提・ビルド時 inline） =====
   - variable: NEXT_PUBLIC_FIREBASE_API_KEY
     value: "AIzaSyDQIjsUjcOk_TFKGC3J0rUq1nYThsnqWL0"
@@ -59,6 +68,12 @@ env:
 
   - variable: NEXT_PUBLIC_FIREBASE_APP_ID
     value: "1:910398811956:web:d128523161c46bf64eff61"
+    availability:
+      - BUILD
+      - RUNTIME
+
+  - variable: NEXT_PUBLIC_BASE_URL
+    value: "https://merupaca--merupaca.asia-east1.hosted.app"
     availability:
       - BUILD
       - RUNTIME

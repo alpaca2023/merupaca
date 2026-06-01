@@ -43,9 +43,9 @@
 | スタイル | Tailwind CSS | `tailwind.config.ts` |
 | UI | React 18 / framer-motion / lucide-react | アイコンは lucide |
 | AI | Anthropic Claude API（`@anthropic-ai/sdk`） | モデル `claude-sonnet-4-5`（[route.ts](app/api/generate/route.ts)） |
-| 認証 | Firebase Authentication（Google + メールリンク） | **Step 2 で実装**（現状プレースホルダー） |
-| DB | Firestore（+ Firebase Admin SDK） | **Step 2 / 3 で実装**（現状 localStorage 暫定） |
-| 課金 | Stripe（Checkout / Customer Portal / Webhook） | **Step 3 で実装** |
+| 認証 | Firebase Authentication（Google + メールリンク） | Step 2 で実装済み |
+| DB | Firestore（+ Firebase Admin SDK） | プロフィール保存・利用制限・課金更新で使用 |
+| 課金 | Stripe（Checkout / Customer Portal / Webhook） | コード実装済み。Stripe 側設定・Secret 登録が必要 |
 | ホスティング | Firebase App Hosting | Vercel から切替済み（2026-05-29） |
 | ローカル Node | v24 系で動作確認（`next@14` は Node 18.17+ 必須） | |
 
@@ -112,11 +112,11 @@ Merupaca/
 ├── lib/
 │   ├── types.ts                  # ★ 共通型・DEFAULT_PROFILE・MAX_BODY_LENGTH
 │   ├── system-prompt.ts          # ★ 文体システムプロンプトを profile から動的生成
-│   ├── profile-store.ts          # プロフィール永続化（現状 localStorage / Step 2 で Firestore へ）
+│   ├── profile-store.ts          # プロフィール永続化（Firestore + 旧 localStorage 移行）
 │   ├── sales-detect.ts           # 営業メール簡易判定（キーワードヒント表示のみ）
-│   ├── firebase.ts               # Firebase Client 初期化（プレースホルダー / Step 2）
-│   ├── firebase-admin.ts         # Firebase Admin 初期化（プレースホルダー / Step 3）
-│   └── auth-context.tsx          # 認証 Context（プレースホルダー / Step 2）
+│   ├── firebase.ts               # Firebase Client 初期化
+│   ├── firebase-admin.ts         # Firebase Admin 初期化（利用制限 / Step 3 Webhook）
+│   └── auth-context.tsx          # 認証 Context
 ├── apphosting.yaml               # Firebase App Hosting 実行構成・シークレット参照
 ├── .env.local.example            # 環境変数テンプレート
 └── tsconfig.json                 # パスエイリアス "@/*" → "./*"
@@ -218,7 +218,7 @@ curl -I https://merupaca--merupaca.asia-east1.hosted.app/   # 200 / 307 を確�
 - **値の入力は本人（Shota）が直接行う。チャットや commit、コード、ドキュメントに値を残さない。**
 - `apphosting.yaml` には**参照名のみ**を書く（値は Secret Manager 側）。
 - 登録済み：`ANTHROPIC_API_KEY`
-- Step 3 で `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` / `FIREBASE_ADMIN_*` を追加予定。
+- `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` / `STRIPE_PRICE_ID` / `FIREBASE_ADMIN_*` を App Hosting の Secret Manager に登録する。
 
 ---
 
@@ -227,17 +227,17 @@ curl -I https://merupaca--merupaca.asia-east1.hosted.app/   # 200 / 307 を確�
 | Step | 内容 | 状態 |
 |---|---|---|
 | 1 | アプリ本体（貼り付け→案A/B 生成）+ オンボーディング + 設定 | ✅ 完了（main: `f67b8de`） |
-| 2 | Firebase Auth + 利用制限（1 日 5 通） | ⬜ 未着手 |
-| 3 | Stripe 課金（Checkout / Portal / Webhook） | ⬜ 未着手 |
+| 2 | Firebase Auth + 利用制限（1 日 5 通） | ✅ 完了 |
+| 3 | Stripe 課金（Checkout / Portal / Webhook） | ✅ コード実装済み（Stripe 側設定・Secret 登録待ち） |
 | 4 | LP（`/`）制作 + SEO | ⬜ 未着手 |
 | 5 | 文体学習機能（few-shot・オプトイン） | ⬜ 未着手 |
 | 6 | リリース準備（プライバシーポリシー / 利用規約 / アナリティクス） | ⬜ 未着手 |
 
-### 次に着手する人へ（Step 2 の入口）
-1. [lib/firebase.ts](lib/firebase.ts) のコメントアウトを有効化し、Client SDK を初期化。
-2. [lib/auth-context.tsx](lib/auth-context.tsx) に `onAuthStateChanged` 購読とサインアウトを実装。
-3. [lib/profile-store.ts](lib/profile-store.ts) を localStorage → Firestore `users/{uid}` に差し替え（型は変えない）。
-4. `usage/{YYYY-MM-DD(JST)}` で 1 日 5 通の利用制限を追加。日付は必ず JST。
+### 次に着手する人へ（Step 4 の入口）
+1. `/` の即リダイレクトを LP に差し替える。
+2. SEO メタデータと OGP を設定する。
+3. ログイン済みユーザー向けの導線は `/app` へ残す。
+4. Stripe Dashboard で Customer Portal と Webhook endpoint（`/api/stripe/webhook`）を設定し、Secret Manager の値を本番反映する。
 
 ---
 
@@ -245,11 +245,9 @@ curl -I https://merupaca--merupaca.asia-east1.hosted.app/   # 200 / 307 を確�
 
 過去のレビューで挙がった対応事項。該当 Step に入る前に必ず確認すること。Step 1 完了時点で H-1〜H-3 は対応済み。
 
-**中（対応推奨 / Step 2・3 で実装）**
-- **M-1**：`usage` の日付キーは必ず **JST(UTC+9)** で生成（サーバーは UTC デフォルト。23 時以降ずれる）。
+**中（対応推奨 / Step 4 以降で実装）**
 - **M-2**：`styleSamples` 書き込み時、`createdAt` 昇順で取得し **20 件超なら古いものを batch 削除**（Step 5）。
-- **M-3**：`/api/generate` に **UID/IP 単位のレートリミット**（Claude コスト暴発防止）。
-- **M-4**：Stripe Webhook は `lastWebhookEventId` で**べき等チェック**（重複配信対策）。
+- **M-3**：`/api/generate` に **短時間の UID/IP 単位レートリミット**（Claude コスト暴発防止）。1 日 5 通の無料枠制限は対応済み。
 - **M-5**：ユーザー作成時に `salesStrength` を明示設定（未定義を作らない）。→ `DEFAULT_PROFILE` で対応済み。
 
 **低**

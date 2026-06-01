@@ -13,7 +13,7 @@
 
 import { useEffect, useRef, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ChevronLeft, LogOut } from "lucide-react";
+import { ChevronLeft, CreditCard, Loader2, LogOut } from "lucide-react";
 import { saveProfile, clearProfile } from "@/lib/profile-store";
 import { getOrMigrateProfile } from "@/lib/profile-migrate";
 import { UserProfile, DEFAULT_PROFILE } from "@/lib/types";
@@ -28,12 +28,15 @@ function SettingsInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const isFirstRun = searchParams.get("firstrun") === "1";
+  const billingResult = searchParams.get("billing");
 
   // Auth gate
   const { ready: authReady, user } = useRequireAuth();
   const { signOutUser } = useAuth();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [billingError, setBillingError] = useState<string | null>(null);
+  const [billingLoading, setBillingLoading] = useState<"checkout" | "portal" | null>(null);
   const [flushing, setFlushing] = useState(false);
   // 初回ロード完了フラグ。これが false の間はデバウンス保存を発火しない
   const loadedRef = useRef(false);
@@ -150,6 +153,29 @@ function SettingsInner() {
     router.replace("/app/login");
   };
 
+  const openBilling = async (mode: "checkout" | "portal") => {
+    if (!user || billingLoading) return;
+    setBillingError(null);
+    setBillingLoading(mode);
+    try {
+      const idToken = await user.getIdToken();
+      const res = await fetch(`/api/billing/${mode}`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${idToken}`,
+        },
+      });
+      const data = (await res.json().catch(() => ({}))) as { url?: string; error?: string };
+      if (!res.ok || !data.url) {
+        throw new Error(data.error || "課金ページを開けませんでした");
+      }
+      window.location.assign(data.url);
+    } catch (e) {
+      setBillingError(e instanceof Error ? e.message : String(e));
+      setBillingLoading(null);
+    }
+  };
+
   return (
     <main className="min-h-screen bg-[--bg]">
       {/* ナビバー */}
@@ -180,9 +206,27 @@ function SettingsInner() {
           </div>
         )}
 
+        {billingResult === "success" && (
+          <div className="mb-4 bg-[--success]/10 text-[--success] text-sm font-semibold rounded-2xl px-4 py-3 leading-relaxed">
+            お支払い手続きが完了しました。反映まで少し時間がかかる場合があります。
+          </div>
+        )}
+
+        {billingResult === "cancel" && (
+          <div className="mb-4 bg-[#ff9f0a]/10 text-[#c77700] text-sm font-semibold rounded-2xl px-4 py-3 leading-relaxed">
+            お支払い手続きをキャンセルしました。
+          </div>
+        )}
+
         {saveError && (
           <div className="mb-4 bg-[--danger]/10 text-[--danger] text-xs font-semibold rounded-2xl px-4 py-3 leading-relaxed">
             {saveError}
+          </div>
+        )}
+
+        {billingError && (
+          <div className="mb-4 bg-[--danger]/10 text-[--danger] text-xs font-semibold rounded-2xl px-4 py-3 leading-relaxed">
+            {billingError}
           </div>
         )}
 
@@ -272,6 +316,31 @@ function SettingsInner() {
           >
             <LogOut size={16} strokeWidth={2.4} color="#8e8e93" />
             ログアウトする
+          </button>
+        </Card>
+
+        {/* プラン */}
+        <SectionLabel>プラン</SectionLabel>
+        <Card>
+          <div className="px-4 py-3 border-b border-[--border] flex items-center justify-between gap-4">
+            <div>
+              <div className="text-[11px] text-[--text-secondary] font-semibold mb-1">現在のプラン</div>
+              <div className="text-[14.5px] text-black font-semibold">
+                {profile.plan === "paid" ? "有料プラン" : "無料プラン"}
+              </div>
+              <div className="text-[11px] text-[--text-secondary] mt-1">
+                {profile.plan === "paid" ? "返信案生成は無制限です" : "返信案生成は1日5通までです"}
+              </div>
+            </div>
+            <CreditCard size={18} strokeWidth={2.4} color="#8e8e93" />
+          </div>
+          <button
+            onClick={() => openBilling(profile.plan === "paid" ? "portal" : "checkout")}
+            disabled={billingLoading !== null}
+            className="w-full flex items-center justify-center gap-2 px-4 py-3 text-[14.5px] text-[--tint] font-semibold disabled:opacity-50"
+          >
+            {billingLoading ? <Loader2 className="animate-spin" size={16} /> : null}
+            {profile.plan === "paid" ? "支払い情報を管理する" : "有料プランに変更する"}
           </button>
         </Card>
 

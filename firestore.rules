@@ -4,9 +4,10 @@ rules_version = '2';
 //
 // 設計方針:
 //   - users/{uid} ドキュメントは本人のみ R/W
-//   - 課金関連フィールド（plan / stripeCustomerId / subscriptionStatus）は
+//   - 課金関連フィールド（plan / stripeCustomerId / stripeSubscriptionId / subscriptionStatus / lastWebhookEventId）は
 //     クライアントから変更不可。Admin SDK（Stripe Webhook）経由のみ更新可能。
-//   - サブコレクション（usage, styleSamples）は後続 PR で追加する
+//   - usage は本人が read 可能、write は Admin SDK のみ
+//   - styleSamples は後続 PR で追加する
 //   - それ以外のパスは明示的に拒否（ホワイトリスト方式）
 //
 // レビュー指摘 H-1 反映（2026-05-31）:
@@ -26,23 +27,35 @@ service cloud.firestore {
                     && request.auth.uid == userId
                     && request.resource.data.plan == "free"
                     && !("stripeCustomerId" in request.resource.data)
-                    && !("subscriptionStatus" in request.resource.data);
+                    && !("stripeSubscriptionId" in request.resource.data)
+                    && !("subscriptionStatus" in request.resource.data)
+                    && !("lastWebhookEventId" in request.resource.data);
 
       // 更新：本人のみ。課金フィールドは元の値と同じであること
-      // （plan / stripeCustomerId / subscriptionStatus は Admin SDK = Stripe Webhook 経由のみ更新可）
+      // （plan / stripeCustomerId / stripeSubscriptionId / subscriptionStatus / lastWebhookEventId は Admin SDK = Stripe Webhook 経由のみ更新可）
       allow update: if request.auth != null
                     && request.auth.uid == userId
                     && request.resource.data.plan == resource.data.plan
                     && request.resource.data.get("stripeCustomerId", null)
                        == resource.data.get("stripeCustomerId", null)
+                    && request.resource.data.get("stripeSubscriptionId", null)
+                       == resource.data.get("stripeSubscriptionId", null)
                     && request.resource.data.get("subscriptionStatus", null)
-                       == resource.data.get("subscriptionStatus", null);
+                       == resource.data.get("subscriptionStatus", null)
+                    && request.resource.data.get("lastWebhookEventId", null)
+                       == resource.data.get("lastWebhookEventId", null);
 
       // 削除：本人のみ（設定リセット用）
       allow delete: if request.auth != null
                     && request.auth.uid == userId;
 
-      // PR-C で追加予定: users/{uid}/usage/{YYYY-MM-DD-JST}
+      match /usage/{dateKey} {
+        allow read: if request.auth != null
+                    && request.auth.uid == userId
+                    && dateKey.matches("^\\d{4}-\\d{2}-\\d{2}$");
+        allow write: if false;
+      }
+
       // Step 5 で追加予定: users/{uid}/styleSamples/{autoId}
       // → 該当 PR で本ファイルに rule を追記する
     }

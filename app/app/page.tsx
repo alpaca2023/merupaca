@@ -46,6 +46,7 @@ export default function AppPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<GenerateResponse | null>(null);
+  const [usage, setUsage] = useState<GenerateResponse["usage"] | null>(null);
   const [variant, setVariant] = useState<Variant>("casual");
   const [editedCasual, setEditedCasual] = useState("");
   const [editedPolished, setEditedPolished] = useState("");
@@ -83,7 +84,7 @@ export default function AppPage() {
   };
 
   const handleGenerate = async () => {
-    if (!profile) return;
+    if (!profile || !user) return;
     setError(null);
 
     const trimmed = body.trim();
@@ -98,9 +99,13 @@ export default function AppPage() {
 
     setLoading(true);
     try {
+      const idToken = await user.getIdToken();
       const res = await fetch("/api/generate", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${idToken}`,
+        },
         body: JSON.stringify({ body: trimmed, profile }),
       });
       if (!res.ok) {
@@ -109,6 +114,7 @@ export default function AppPage() {
       }
       const data = (await res.json()) as GenerateResponse;
       setResult(data);
+      setUsage(data.usage ?? null);
       setEditedCasual(data.casual);
       setEditedPolished(data.polished);
       setVariant("casual");
@@ -137,6 +143,7 @@ export default function AppPage() {
     setStage("input");
     setBody("");
     setResult(null);
+    setUsage(null);
     setError(null);
   };
 
@@ -304,6 +311,12 @@ export default function AppPage() {
             <p className="mt-3 text-center text-[11px] text-[--text-secondary] leading-relaxed">
               コピーしたら自分のメーラーに貼り付けて送信してください。<br />
               メルパカからメールは送信されません。
+              {usage?.plan === "free" && usage.remaining !== null && (
+                <>
+                  <br />
+                  本日の残り生成回数: {usage.remaining} / {usage.limit}
+                </>
+              )}
             </p>
           </>
         )}

@@ -1,24 +1,34 @@
 /**
- * Firebase Admin SDK 初期化（プレースホルダー）
+ * Firebase Admin SDK 初期化（サーバー側）
  *
- * Step 3 の Stripe Webhook で users/{uid}.plan を更新するときに有効化する。
- * Step 1 では import 可能な状態だけ整える。
+ * - ローカル: FIREBASE_ADMIN_* があればサービスアカウントで初期化
+ * - App Hosting: 環境のデフォルト認証情報を使って初期化
+ *
+ * クライアントから変更できない利用制限・課金フィールド更新は Admin SDK 経由で行う。
  */
 
-// import { cert, getApps, initializeApp } from "firebase-admin/app";
-// import { getFirestore } from "firebase-admin/firestore";
-//
-// const adminApp = getApps().length
-//   ? getApps()[0]
-//   : initializeApp({
-//       credential: cert({
-//         projectId: process.env.FIREBASE_ADMIN_PROJECT_ID,
-//         clientEmail: process.env.FIREBASE_ADMIN_CLIENT_EMAIL,
-//         privateKey: process.env.FIREBASE_ADMIN_PRIVATE_KEY?.replace(/\\n/g, "\n"),
-//       }),
-//     });
-//
-// export const adminDb = getFirestore(adminApp);
+import { cert, getApps, initializeApp } from "firebase-admin/app";
+import { getAuth } from "firebase-admin/auth";
+import { getFirestore } from "firebase-admin/firestore";
 
-// Step 3 で有効化
-export const FIREBASE_ADMIN_PLACEHOLDER = true;
+const projectId =
+  process.env.FIREBASE_ADMIN_PROJECT_ID || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
+const clientEmail = process.env.FIREBASE_ADMIN_CLIENT_EMAIL;
+const privateKey = process.env.FIREBASE_ADMIN_PRIVATE_KEY?.replace(/\\n/g, "\n");
+
+const hasServiceAccount = Boolean(projectId && clientEmail && privateKey);
+
+const adminApp = getApps().length
+  ? getApps()[0]
+  : hasServiceAccount
+    ? initializeApp({
+        credential: cert({
+          projectId,
+          clientEmail,
+          privateKey,
+        }),
+      })
+    : initializeApp();
+
+export const adminAuth = getAuth(adminApp);
+export const adminDb = getFirestore(adminApp);

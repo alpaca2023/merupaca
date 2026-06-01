@@ -32,6 +32,12 @@ export interface UserProfile {
   plan: "free" | "paid";
   /** Stripe 顧客ID（任意） */
   stripeCustomerId?: string;
+  /** Stripe Subscription ID（任意） */
+  stripeSubscriptionId?: string;
+  /** Stripe Subscription status（任意） */
+  subscriptionStatus?: string;
+  /** 最後に処理した Stripe Webhook event.id（任意） */
+  lastWebhookEventId?: string;
   /** 作成日時（ISO文字列 or Firestore Timestamp） */
   createdAt?: string;
 }
@@ -50,6 +56,20 @@ export interface GenerateResponse {
   casual: string;
   /** 案B: 推敲（丁寧） */
   polished: string;
+  /** 生成後の利用状況（無料プランのみ残数あり） */
+  usage?: UsageStatus;
+}
+
+export interface UsageStatus {
+  plan: "free" | "paid";
+  /** JST の日付キー */
+  date: string;
+  /** 当日の利用回数 */
+  used: number | null;
+  /** 当日の上限。paid は null */
+  limit: number | null;
+  /** 残り回数。paid は null */
+  remaining: number | null;
 }
 
 /** 入力本文の最大文字数（M指摘 L-3） */
