@@ -26,15 +26,6 @@ env:
   - variable: FIREBASE_ADMIN_PRIVATE_KEY
     secret: FIREBASE_ADMIN_PRIVATE_KEY
 
-  - variable: STRIPE_SECRET_KEY
-    secret: STRIPE_SECRET_KEY
-
-  - variable: STRIPE_WEBHOOK_SECRET
-    secret: STRIPE_WEBHOOK_SECRET
-
-  - variable: STRIPE_PRICE_ID
-    secret: STRIPE_PRICE_ID
-
   # ===== クライアント側（公開前提・ビルド時 inline） =====
   - variable: NEXT_PUBLIC_FIREBASE_API_KEY
     value: "AIzaSyDQIjsUjcOk_TFKGC3J0rUq1nYThsnqWL0"
