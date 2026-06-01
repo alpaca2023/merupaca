@@ -6,7 +6,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { adminAuth, adminDb } from "@/lib/firebase-admin";
+import { getAdminAuth, getAdminDb } from "@/lib/firebase-admin";
 import {
   getBaseUrl,
   getStripePriceId,
@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
   let uid: string;
   let email: string | undefined;
   try {
-    const decoded = await adminAuth.verifyIdToken(token);
+    const decoded = await getAdminAuth().verifyIdToken(token);
     uid = decoded.uid;
     email = decoded.email;
   } catch {
@@ -39,7 +39,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const userSnap = await adminDb.doc(`users/${uid}`).get();
+    const userSnap = await getAdminDb().doc(`users/${uid}`).get();
     if (!userSnap.exists) {
       return NextResponse.json({ error: "プロフィールが未作成です" }, { status: 403 });
     }

@@ -7,21 +7,27 @@
  * クライアントから変更できない利用制限・課金フィールド更新は Admin SDK 経由で行う。
  */
 
-import { cert, getApps, initializeApp } from "firebase-admin/app";
+import { App, cert, getApps, initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore } from "firebase-admin/firestore";
 
-const projectId =
-  process.env.FIREBASE_ADMIN_PROJECT_ID || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
-const clientEmail = process.env.FIREBASE_ADMIN_CLIENT_EMAIL;
-const privateKey = process.env.FIREBASE_ADMIN_PRIVATE_KEY?.replace(/\\n/g, "\n");
-const isAppHosting = process.env.FIREBASE_APP_HOSTING === "1";
+let adminApp: App | null = null;
 
-const hasServiceAccount = !isAppHosting && Boolean(projectId && clientEmail && privateKey);
+function getAdminApp(): App {
+  if (adminApp) return adminApp;
+  if (getApps().length > 0) {
+    adminApp = getApps()[0];
+    return adminApp;
+  }
 
-const adminApp = getApps().length
-  ? getApps()[0]
-  : hasServiceAccount
+  const projectId =
+    process.env.FIREBASE_ADMIN_PROJECT_ID || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
+  const clientEmail = process.env.FIREBASE_ADMIN_CLIENT_EMAIL;
+  const privateKey = process.env.FIREBASE_ADMIN_PRIVATE_KEY?.replace(/\\n/g, "\n");
+  const isAppHosting = process.env.FIREBASE_APP_HOSTING === "1";
+  const hasServiceAccount = !isAppHosting && Boolean(projectId && clientEmail && privateKey);
+
+  adminApp = hasServiceAccount
     ? initializeApp({
         credential: cert({
           projectId,
@@ -30,6 +36,13 @@ const adminApp = getApps().length
         }),
       })
     : initializeApp(projectId ? { projectId } : undefined);
+  return adminApp;
+}
 
-export const adminAuth = getAuth(adminApp);
-export const adminDb = getFirestore(adminApp);
+export function getAdminAuth() {
+  return getAuth(getAdminApp());
+}
+
+export function getAdminDb() {
+  return getFirestore(getAdminApp());
+}

@@ -14,7 +14,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { buildSystemPrompt, buildUserMessage } from "@/lib/system-prompt";
-import { adminAuth, adminDb } from "@/lib/firebase-admin";
+import { getAdminAuth, getAdminDb } from "@/lib/firebase-admin";
 import {
   DEFAULT_PROFILE,
   GenerateRequest,
@@ -55,7 +55,7 @@ function normalizePlan(value: unknown): UserProfile["plan"] {
 }
 
 async function loadServerPlan(uid: string): Promise<UserProfile["plan"]> {
-  const snap = await adminDb.doc(`users/${uid}`).get();
+  const snap = await getAdminDb().doc(`users/${uid}`).get();
   if (!snap.exists) {
     throw new Error("プロフィールが未作成です");
   }
@@ -68,8 +68,8 @@ async function reserveUsage(uid: string, plan: UserProfile["plan"]): Promise<Usa
     return { plan, date, used: null, limit: null, remaining: null };
   }
 
-  const usageRef = adminDb.doc(`users/${uid}/usage/${date}`);
-  return adminDb.runTransaction(async (tx) => {
+  const usageRef = getAdminDb().doc(`users/${uid}/usage/${date}`);
+  return getAdminDb().runTransaction(async (tx) => {
     const snap = await tx.get(usageRef);
     const current = snap.exists && typeof snap.data()?.count === "number" ? snap.data()!.count : 0;
 
@@ -114,7 +114,7 @@ export async function POST(req: NextRequest) {
 
   let uid: string;
   try {
-    const decoded = await adminAuth.verifyIdToken(token);
+    const decoded = await getAdminAuth().verifyIdToken(token);
     uid = decoded.uid;
   } catch {
     return NextResponse.json({ error: "ログイン情報を確認できませんでした" }, { status: 401 });

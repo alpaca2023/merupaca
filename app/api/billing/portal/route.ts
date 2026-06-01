@@ -3,7 +3,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { adminAuth, adminDb } from "@/lib/firebase-admin";
+import { getAdminAuth, getAdminDb } from "@/lib/firebase-admin";
 import {
   getBaseUrl,
   stripeFormRequest,
@@ -26,14 +26,14 @@ export async function POST(req: NextRequest) {
 
   let uid: string;
   try {
-    const decoded = await adminAuth.verifyIdToken(token);
+    const decoded = await getAdminAuth().verifyIdToken(token);
     uid = decoded.uid;
   } catch {
     return NextResponse.json({ error: "ログイン情報を確認できませんでした" }, { status: 401 });
   }
 
   try {
-    const userSnap = await adminDb.doc(`users/${uid}`).get();
+    const userSnap = await getAdminDb().doc(`users/${uid}`).get();
     const stripeCustomerId = userSnap.data()?.stripeCustomerId;
     if (!userSnap.exists || typeof stripeCustomerId !== "string" || stripeCustomerId.length === 0) {
       return NextResponse.json({ error: "Stripe 顧客情報が未作成です" }, { status: 400 });

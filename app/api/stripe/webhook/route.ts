@@ -7,7 +7,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
-import { adminDb } from "@/lib/firebase-admin";
+import { getAdminDb } from "@/lib/firebase-admin";
 import { verifyStripeSignature } from "@/lib/stripe-rest";
 
 export const runtime = "nodejs";
@@ -47,10 +47,10 @@ async function applyUserUpdateOnce(
   uid: string,
   update: Record<string, unknown>,
 ): Promise<boolean> {
-  const eventRef = adminDb.doc(`stripeWebhookEvents/${event.id}`);
-  const userRef = adminDb.doc(`users/${uid}`);
+  const eventRef = getAdminDb().doc(`stripeWebhookEvents/${event.id}`);
+  const userRef = getAdminDb().doc(`users/${uid}`);
 
-  return adminDb.runTransaction(async (tx) => {
+  return getAdminDb().runTransaction(async (tx) => {
     const eventSnap = await tx.get(eventRef);
     if (eventSnap.exists) return false;
 
@@ -74,8 +74,8 @@ async function applyUserUpdateOnce(
 }
 
 async function markIgnoredOnce(event: StripeEvent, reason: string): Promise<boolean> {
-  const eventRef = adminDb.doc(`stripeWebhookEvents/${event.id}`);
-  return adminDb.runTransaction(async (tx) => {
+  const eventRef = getAdminDb().doc(`stripeWebhookEvents/${event.id}`);
+  return getAdminDb().runTransaction(async (tx) => {
     const eventSnap = await tx.get(eventRef);
     if (eventSnap.exists) return false;
 
@@ -90,7 +90,7 @@ async function markIgnoredOnce(event: StripeEvent, reason: string): Promise<bool
 }
 
 async function findUidByStripeCustomerId(customerId: string): Promise<string | null> {
-  const snap = await adminDb
+  const snap = await getAdminDb()
     .collection("users")
     .where("stripeCustomerId", "==", customerId)
     .limit(1)
