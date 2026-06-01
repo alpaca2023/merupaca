@@ -34,8 +34,20 @@ function SettingsInner() {
   const { signOutUser } = useAuth();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [flushing, setFlushing] = useState(false);
   // 初回ロード完了フラグ。これが false の間はデバウンス保存を発火しない
   const loadedRef = useRef(false);
+
+  // M-1 対策：unmount 時の best-effort flush で参照する最新値を ref で持つ
+  // （useEffect cleanup 内ではクロージャ越しに古い値を参照してしまうため）
+  const profileRef = useRef<UserProfile | null>(null);
+  const userRef = useRef(user);
+  useEffect(() => {
+    profileRef.current = profile;
+  }, [profile]);
+  useEffect(() => {
+    userRef.current = user;
+  }, [user]);
 
   useEffect(() => {
     if (!authReady || !user) return;
@@ -79,13 +91,47 @@ function SettingsInner() {
     };
   }, [debouncedProfile, user]);
 
+  // M-1 対策：unmount 時に未保存の変更を best-effort で flush
+  // （タブを閉じる、ブラウザバック等で「戻る」ボタンを経由しないケース対策）
+  // ref で最新値を参照するため deps は空でよい
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    return () => {
+      const latestProfile = profileRef.current;
+      const latestUser = userRef.current;
+      if (loadedRef.current && latestUser && latestProfile) {
+        // No await（unmount 中なので fire-and-forget）
+        saveProfile(latestUser.uid, latestProfile).catch(() => {
+          // unmount 中で UI 更新できないため握りつぶす
+        });
+      }
+    };
+  }, []); // 空配列：アンマウント時のみ実行
+
   if (!authReady || !profile) return null;
 
   const update = <K extends keyof UserProfile>(key: K, value: UserProfile[K]) => {
     setProfile((prev) => (prev ? { ...prev, [key]: value } : prev));
   };
 
-  const back = () => router.push("/app");
+  // M-1 対策：「戻る」押下時はデバウンスを待たず最新の profile を必ず保存してから遷移
+  // 保存失敗時は遷移せずエラー表示
+  const back = async () => {
+    if (flushing) return;
+    if (user && profile && loadedRef.current) {
+      setFlushing(true);
+      try {
+        await saveProfile(user.uid, profile);
+        setSaveError(null);
+      } catch (e) {
+        setSaveError(`保存に失敗しました: ${e instanceof Error ? e.message : String(e)}`);
+        setFlushing(false);
+        return;
+      }
+      setFlushing(false);
+    }
+    router.push("/app");
+  };
 
   const handleReset = async () => {
     if (!user) return;
@@ -112,11 +158,12 @@ function SettingsInner() {
           <button
             onClick={back}
             type="button"
-            className="relative z-10 flex items-center gap-1 px-2 py-2"
+            disabled={flushing}
+            className="relative z-10 flex items-center gap-1 px-2 py-2 disabled:opacity-50"
             aria-label="戻る"
           >
             <ChevronLeft size={24} color={TINT} strokeWidth={2.4} />
-            <span className="text-[--tint] text-[17px]">戻る</span>
+            <span className="text-[--tint] text-[17px]">{flushing ? "保存中…" : "戻る"}</span>
           </button>
           {/* タイトルはクリックを透過させる（pointer-events-none）。
               絶対配置で「戻る」ボタンの上に被っても click を奪わない */}

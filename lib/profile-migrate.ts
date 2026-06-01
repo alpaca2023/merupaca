@@ -11,7 +11,7 @@
  * 何度実行しても同じ結果。Step 1 ユーザーのアップグレード時に自動でデータが残る。
  */
 
-import { UserProfile } from "./types";
+import { UserProfile, DEFAULT_PROFILE } from "./types";
 import {
   loadProfile,
   saveProfile,
@@ -27,10 +27,13 @@ export async function getOrMigrateProfile(uid: string): Promise<UserProfile | nu
   // 2. localStorage に旧データがあれば Firestore に移行
   const legacy = loadLegacyLocalProfile();
   if (legacy) {
+    // L-1 対策：欠損キーは DEFAULT_PROFILE で補完してから移行
+    // （旧データに learningEnabled / plan などのキーが無い可能性に備える）
+    const merged: UserProfile = { ...DEFAULT_PROFILE, ...legacy };
     // createdAt が無ければ saveProfile 側で serverTimestamp が入る
-    await saveProfile(uid, legacy);
+    await saveProfile(uid, merged);
     clearLegacyLocalProfile();
-    return legacy;
+    return merged;
   }
 
   // 3. 新規ユーザー（オンボーディング誘導）
