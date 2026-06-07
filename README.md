@@ -101,7 +101,9 @@ npm run dev
 Merupaca/
 ├── app/                          # Next.js App Router
 │   ├── layout.tsx                # ルートレイアウト（AuthProvider をマウント）
-│   ├── page.tsx                  # "/" → "/app" へリダイレクト（Step 4 で LP 実装予定）
+│   ├── page.tsx                  # "/" 公開 LP（ヒーロー/痛み/解決/理由/CTA）
+│   ├── opengraph-image.tsx       # OGP 画像を動的生成（twitter-image も流用）
+│   ├── _components/landing-cta.tsx  # 認証状態で出し分ける CTA（未ログイン→/app/login、ログイン済→/app）
 │   ├── globals.css               # Tailwind ベース
 │   ├── api/
 │   │   └── generate/route.ts     # ★ 返信案生成 API（Claude 呼び出し・サーバー専用）
@@ -229,15 +231,19 @@ curl -I https://merupaca--merupaca.asia-east1.hosted.app/   # 200 / 307 を確�
 | 1 | アプリ本体（貼り付け→案A/B 生成）+ オンボーディング + 設定 | ✅ 完了（main: `f67b8de`） |
 | 2 | Firebase Auth + 利用制限（1 日 5 通） | ✅ 完了 |
 | 3 | Stripe 課金（Checkout / Portal / Webhook） | ✅ コード実装済み（Stripe 側設定・Secret 登録待ち） |
-| 4 | LP（`/`）制作 + SEO | ⬜ 未着手 |
+| 4 | LP（`/`）制作 + SEO | ✅ 完了（`/` LP・OGP・メタデータ実装） |
 | 5 | 文体学習機能（few-shot・オプトイン） | ⬜ 未着手 |
 | 6 | リリース準備（プライバシーポリシー / 利用規約 / アナリティクス） | ⬜ 未着手 |
 
-### 次に着手する人へ（Step 4 の入口）
-1. `/` の即リダイレクトを LP に差し替える。
-2. SEO メタデータと OGP を設定する。
-3. ログイン済みユーザー向けの導線は `/app` へ残す。
-4. Stripe Dashboard で Customer Portal と Webhook endpoint（`/api/stripe/webhook`）を設定し、Secret Manager の値を本番反映する。
+### Step 4 実装メモ（完了）
+1. ✅ `/` の即リダイレクトを公開 LP に差し替え（`app/page.tsx`、サーバーコンポーネントで静的描画）。
+2. ✅ SEO メタデータ（`metadataBase`/`title` テンプレ/keywords/robots）と OGP・Twitter カードを設定。OGP 画像は `app/opengraph-image.tsx` で動的生成（日本語サブセットフォント `app/_assets/og-font.ttf` を同梱）。
+3. ✅ ログイン済みユーザーの導線は `/app` へ（`app/_components/landing-cta.tsx` が認証状態で出し分け）。
+4. `next.config.mjs` の `/` の `no-store` を撤去し CDN キャッシュ可に（`/app/:path*` は引き続き no-store）。
+
+### 次に着手する人へ（Step 4 の残・運用）
+1. Stripe Dashboard で Customer Portal と Webhook endpoint（`/api/stripe/webhook`）を設定し、Secret Manager の値を本番反映する。
+2. 利用規約・プライバシーポリシーのページを用意し、LP フッターの `#` リンクを差し替える（Step 6）。
 
 ---
 

@@ -29,7 +29,27 @@ function getFirebaseApp(): FirebaseApp {
   return initializeApp(firebaseConfig);
 }
 
+/**
+ * Auth を初期化する。
+ *
+ * apiKey が未設定だと getAuth は `auth/invalid-api-key` を投げる。
+ * NEXT_PUBLIC_* はビルド時に値が入るため通常は問題ないが、env 無しの
+ * 静的プリレンダリング（公開 LP `/` など）でビルドが落ちないよう、
+ * サーバー側でのみ握りつぶす。Auth は常にクライアントでのみ使うため、
+ * ブラウザでは従来どおりキー欠落を明確にエラーにする。
+ */
+function getAuthSafe(app: FirebaseApp): Auth {
+  try {
+    return getAuth(app);
+  } catch (e) {
+    if (typeof window === "undefined") {
+      return null as unknown as Auth;
+    }
+    throw e;
+  }
+}
+
 export const firebaseApp = getFirebaseApp();
-export const auth: Auth = getAuth(firebaseApp);
+export const auth: Auth = getAuthSafe(firebaseApp);
 export const db: Firestore = getFirestore(firebaseApp);
 export const googleProvider = new GoogleAuthProvider();
